@@ -30,8 +30,7 @@ Starting simple. Just a CLI that takes text input, outputs proof tree. No UI, no
 
 Using Grok. What better model than the truth seeker itself? Made the master prompt. This is 80% of the product. Need structured JSON: claim, assumptions, derivation steps, falsifiable tests, verdict.
 
-First runs are weird. Model outputs fine but feels like it's justifying claims, not evaluating them. Building proofs for the claim, not stress testing them. Problem.
-
+First runs are weird. Model outputs fine but feels like it's justifying claims, not evaluating them. Building proofs for the claim, not stress testing them. Problem...
 
 Made a few changes but still noticing bias. Model wants to prove claims, not test them. Looking at the prompt language: "Your purpose is to construct rigorous, verifiable proof trees for claims."
 
