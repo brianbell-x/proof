@@ -6,6 +6,7 @@ and perform calculations while constructing rigorous proofs for claims.
 import os
 import json
 import logging
+import time
 from typing import Dict, Any
 from datetime import datetime
 from openai import OpenAI
@@ -100,6 +101,18 @@ class ProverAgent:
             logger.error(f"Prompt file not found: {path}")
             return ""
 
+    def _calculate_costs(self, prompt_tokens: int, completion_tokens: int) -> Dict[str, Any]:
+        input_cost_per_million = 0.20
+        output_cost_per_million = 0.50
+        input_cost = (prompt_tokens / 1_000_000) * input_cost_per_million
+        output_cost = (completion_tokens / 1_000_000) * output_cost_per_million
+        total_cost = input_cost + output_cost
+        return {
+            "input_usd": round(input_cost, 6),
+            "output_usd": round(output_cost, 6),
+            "total_usd": round(total_cost, 6)
+        }
+
     def _execute_tool(self, tool_call) -> Dict[str, Any]:
         import time
         start_time = time.time()
@@ -162,6 +175,7 @@ class ProverAgent:
             }
 
     def prove_claim(self, claim: str, max_iterations: int = None) -> Dict[str, Any]:
+        start_time = time.time()
         messages = [
             {
                 "role": "system",
@@ -176,6 +190,8 @@ class ProverAgent:
         iteration = 0
         final_result = None
         tools_used = set()
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
 
         while True:
             iteration += 1
@@ -188,6 +204,11 @@ class ProverAgent:
                     tools=self.tool_schemas,
                     tool_choice="auto"
                 )
+
+                if hasattr(response, 'usage') and response.usage:
+                    usage = response.usage
+                    total_prompt_tokens += getattr(usage, 'prompt_tokens', 0)
+                    total_completion_tokens += getattr(usage, 'completion_tokens', 0)
 
                 message = response.choices[0].message
                 message_dict = message.model_dump() if hasattr(message, 'model_dump') else message
@@ -257,15 +278,37 @@ class ProverAgent:
 
             except Exception as e:
                 logger.error(f"Error in iteration {iteration}: {e}")
+                end_time = time.time()
+                elapsed_time = end_time - start_time
+                cost_info = self._calculate_costs(total_prompt_tokens, total_completion_tokens)
                 return {
                     "error": str(e),
                     "claim": claim,
-                    "iterations_completed": iteration
+                    "iterations_completed": iteration,
+                    "time_seconds": round(elapsed_time, 3),
+                    "tokens": {
+                        "prompt": total_prompt_tokens,
+                        "completion": total_completion_tokens,
+                        "total": total_prompt_tokens + total_completion_tokens
+                    },
+                    "cost": cost_info
                 }
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        cost_info = self._calculate_costs(total_prompt_tokens, total_completion_tokens)
+        tokens_info = {
+            "prompt": total_prompt_tokens,
+            "completion": total_completion_tokens,
+            "total": total_prompt_tokens + total_completion_tokens
+        }
 
         if final_result:
             final_result["iterations_used"] = iteration
             final_result["tools_used"] = list(tools_used)
+            final_result["time_seconds"] = round(elapsed_time, 3)
+            final_result["tokens"] = tokens_info
+            final_result["cost"] = cost_info
             logger.info(f"[FINAL RESULT] {json.dumps(final_result)}")
             return final_result
         else:
@@ -274,7 +317,10 @@ class ProverAgent:
                 "claim": claim,
                 "iterations_completed": iteration,
                 "partial_result": result if 'result' in locals() else None,
-                "tools_used": list(tools_used)
+                "tools_used": list(tools_used),
+                "time_seconds": round(elapsed_time, 3),
+                "tokens": tokens_info,
+                "cost": cost_info
             }
             logger.info(f"[FINAL RESULT] {json.dumps(partial)}")
             return partial
@@ -311,11 +357,18 @@ def main():
                 print(f"\n❌ Error: {result['error']}")
                 if "partial_result" in result:
                     print("Partial result available in logs.")
+                if "time_seconds" in result:
+                    print(f"   Time: {result['time_seconds']}s")
+                if "cost" in result:
+                    print(f"   Cost: ${result['cost']['total_usd']:.6f}")
             else:
                 verdict = result.get("verdict", "UNKNOWN")
                 reason = result.get("reasoning_summary", "No summary available")
                 iterations = result.get("iterations_used", "?")
                 tools = result.get("tools_used", [])
+                time_seconds = result.get("time_seconds", 0)
+                cost_info = result.get("cost", {})
+                tokens_info = result.get("tokens", {})
 
                 verdict_emoji = {"PROVEN": "✅", "DISPROVEN": "❌", "UNSUPPORTED": "❓", "UNVERIFIABLE": "🤷"}.get(verdict, "❓")
 
@@ -323,6 +376,11 @@ def main():
                 print(f"   Reason: {reason}")
                 print(f"   Iterations: {iterations}")
                 print(f"   Tools used: {', '.join(tools) if tools else 'None'}")
+                print(f"   Time: {time_seconds}s")
+                if cost_info:
+                    print(f"   Cost: ${cost_info.get('total_usd', 0):.6f} (input: ${cost_info.get('input_usd', 0):.6f}, output: ${cost_info.get('output_usd', 0):.6f})")
+                if tokens_info:
+                    print(f"   Tokens: {tokens_info.get('total', 0)} (prompt: {tokens_info.get('prompt', 0)}, completion: {tokens_info.get('completion', 0)})")
 
             # Optional full JSON output
             if os.getenv("PROVER_SHOW_FULL", "0").lower() in ("1", "true", "yes"):
