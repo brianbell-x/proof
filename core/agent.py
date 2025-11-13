@@ -7,6 +7,7 @@ import os
 import json
 import logging
 from typing import Dict, Any
+from datetime import datetime
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -67,7 +68,8 @@ class ProverAgent:
 
         self.master_prompt = self._load_prompt("prompts/master.md")
         self.tool_prompt = self._load_prompt("prompts/tool_prompt.md")
-        self.system_prompt = self.master_prompt + "\n\n" + self.tool_prompt
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        self.system_prompt = f"Current date: {current_date}\n\n" + self.master_prompt + "\n\n" + self.tool_prompt
 
         self.tool_schemas = []
         if ":online" not in self.model:
@@ -291,4 +293,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

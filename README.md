@@ -62,3 +62,5 @@ It's not perfect. Not omniscient. But it's honest. Shows its work. Cites sources
 Still just a proof of concept. The real vision is bigger. Imagine X with Prove button on every post. Background system building proof trees for viral claims. Make truth seeking as easy as sharing misinformation.
 
 Considering the next iteration to make this a tool (like agent as a tool) to seperate concerns from a chat model.
+
+After testing this a bit more... I need the date and time to be injected into the context. 
