@@ -266,7 +266,6 @@ def main():
                     print("Partial result available in logs.")
             else:
                 verdict = result.get("verdict", "UNKNOWN")
-                confidence = result.get("confidence", "UNKNOWN")
                 reason = result.get("reasoning_summary", "No summary available")
                 iterations = result.get("iterations_used", "?")
                 tools = result.get("tools_used", [])
@@ -274,7 +273,6 @@ def main():
                 verdict_emoji = {"PROVEN": "✅", "DISPROVEN": "❌", "UNSUPPORTED": "❓", "UNVERIFIABLE": "🤷"}.get(verdict, "❓")
 
                 print(f"\n{verdict_emoji} Verdict: {verdict}")
-                print(f"   Confidence: {confidence}")
                 print(f"   Reason: {reason}")
                 print(f"   Iterations: {iterations}")
                 print(f"   Tools used: {', '.join(tools) if tools else 'None'}")

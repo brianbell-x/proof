@@ -11,13 +11,11 @@ Given a claim and the Prover Agent's complete analysis, evaluate whether the ver
 **PASS** grade means:
 - Verdict is one of: PROVEN, DISPROVEN, UNSUPPORTED, or UNVERIFIABLE
 - Reasoning is logically consistent with the evidence presented
-- Confidence level matches the strength of evidence
 - Reasoning_summary accurately captures the verdict
 - Tool usage (if any) was appropriate and results were properly interpreted
 
 **FAIL** grade means:
 - Verdict contradicts the evidence or reasoning presented
-- Confidence level is unjustifiably high or low given the evidence
 - Reasoning_summary misrepresents the analysis
 - Tool results were misinterpreted or ignored
 - Verdict category is inappropriate for the type of claim
@@ -31,7 +29,6 @@ You MUST output valid JSON only:
   "grade": "PASS" or "FAIL",
   "reasoning": "Brief explanation of why this analysis passes or fails evaluation",
   "verdict_appropriateness": "How well the verdict fits the evidence (EXCELLENT/GOOD/FAIR/POOR)",
-  "confidence_assessment": "Whether the confidence level is appropriate (APPROPRIATE/TOO_HIGH/TOO_LOW)",
   "evidence_quality": "Assessment of how well evidence supports the conclusion (STRONG/MODERATE/WEAK/NONE)"
 }
 ```
@@ -41,8 +38,7 @@ You MUST output valid JSON only:
 1. **Be impartial**: Evaluate based only on what the Prover Agent presented, not your own knowledge of the claim
 2. **Focus on consistency**: Check if the conclusion logically follows from the presented evidence and reasoning
 3. **Consider tool usage**: If tools were used, verify that results were properly interpreted and integrated
-4. **Assess confidence**: High confidence requires strong evidence; low confidence is appropriate for weak evidence
-5. **Be constructive**: Provide clear reasoning for your grade
+4. **Be constructive**: Provide clear reasoning for your grade
 
 You MUST output valid JSON only. No explanatory text before or after the JSON.
 

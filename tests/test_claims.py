@@ -44,8 +44,6 @@ def test_claim_verdict(agent, claim_data):
     valid_verdicts = ["PROVEN", "DISPROVEN", "UNSUPPORTED", "UNVERIFIABLE"]
     assert result["verdict"] in valid_verdicts, f"Invalid verdict '{result['verdict']}' for {claim_data['claim']}"
 
-    assert "confidence" in result, "Missing confidence level"
-    assert result["confidence"] in ["HIGH", "MEDIUM", "LOW"], f"Invalid confidence '{result['confidence']}'"
     assert "reasoning_summary" in result, "Missing reasoning summary"
     assert isinstance(result["reasoning_summary"], str), "Reasoning summary should be a string"
 
@@ -75,7 +73,7 @@ def test_claim_verdict(agent, claim_data):
 def test_claim_structure_consistency(agent):
     result = agent.prove_claim("Water boils at 100Â°C at standard atmospheric pressure.")
 
-    expected_keys = ["claim", "verdict", "assumptions", "derivation", "falsifiable_test", "iterations_used", "tools_used", "confidence", "reasoning_summary"]
+    expected_keys = ["claim", "verdict", "assumptions", "derivation", "falsifiable_test", "iterations_used", "tools_used", "reasoning_summary"]
     for key in expected_keys:
         assert key in result, f"Missing key: {key}"
 

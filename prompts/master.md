@@ -93,7 +93,6 @@ When you have completed your analysis:
   ],
   "falsifiable_test": "A concise, practical experiment to verify the claim.",
   "verdict": "One of: 'PROVEN', 'DISPROVEN', 'UNSUPPORTED', or 'UNVERIFIABLE'.",
-  "confidence": "One of: 'HIGH', 'MEDIUM', or 'LOW' - indicating certainty in the verdict.",
   "reasoning_summary": "A one-sentence summary explaining the verdict."
 }
 ```

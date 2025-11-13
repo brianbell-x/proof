@@ -83,7 +83,6 @@ PROVER AGENT ANALYSIS:
                 "grade": "ERROR",
                 "reasoning": f"Failed to parse grading response: {e}",
                 "verdict_appropriateness": "UNKNOWN",
-                "confidence_assessment": "UNKNOWN",
                 "evidence_quality": "UNKNOWN"
             }
     except Exception as e:
@@ -92,7 +91,6 @@ PROVER AGENT ANALYSIS:
             "grade": "ERROR",
             "reasoning": f"API call failed: {e}",
             "verdict_appropriateness": "UNKNOWN",
-            "confidence_assessment": "UNKNOWN",
             "evidence_quality": "UNKNOWN"
         }
 
@@ -111,7 +109,6 @@ def test_ai_graded_claim_analysis(prover_agent, grading_client, claim_data):
     log_message += f"AI Grade: {grade.get('grade', 'UNKNOWN')}\n"
     log_message += f"Grading Reasoning: {grade.get('reasoning', 'NONE')}\n"
     log_message += f"Verdict Appropriateness: {grade.get('verdict_appropriateness', 'UNKNOWN')}\n"
-    log_message += f"Confidence Assessment: {grade.get('confidence_assessment', 'UNKNOWN')}\n"
     log_message += f"Evidence Quality: {grade.get('evidence_quality', 'UNKNOWN')}\n"
     log_message += f"Full Prover Result: {json.dumps(result, indent=2)}\n"
     log_message += f"{'='*80}"
@@ -133,7 +130,7 @@ def test_grading_prompt_structure(grading_client):
         "derivation": []
     }
     grade = grade_analysis(grading_client, "Test claim", mock_result)
-    expected_fields = ["grade", "reasoning", "verdict_appropriateness", "confidence_assessment", "evidence_quality"]
+    expected_fields = ["grade", "reasoning", "verdict_appropriateness", "evidence_quality"]
     for field in expected_fields:
         assert field in grade, f"Missing field in grade result: {field}"
 
