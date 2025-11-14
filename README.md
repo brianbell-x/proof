@@ -1,4 +1,4 @@
-# Prover Agent, as a tool? (haven't decided on a name)
+# Proof Tool
 
 A real time FUD destruction engine that stress tests claims through rigorous logical analysis and evidence gathering. Not a fact checker, a proof checker. Feed it any claim and get a transparent proof tree showing logical derivation or exposing shaky foundations. Built on falsification first skepticism: it tries to break claims before defending them, shows its work, cites sources, and admits when it doesn't know.
 
@@ -19,7 +19,7 @@ A real time FUD destruction engine that stress tests claims through rigorous log
    ```bash
    python -m chat.agent
    ```
-4. **Type a claim and see the proof tree**
+4. **Chat with the agent and ask it about anything you want proof of**
 
 ## The Story:
 
@@ -64,3 +64,7 @@ Still just a proof of concept. The real vision is bigger. Imagine X with Prove b
 Considering the next iteration to make this a tool (like agent as a tool) to seperate concerns from a chat model.
 
 After testing this a bit more... I need the date and time to be injected into the context. 
+
+Okay its an agent as a tool now. I'm noticing that this may be able to prove alot more than just claims... It may be able to test theories, hypotheses, and even theories about theories... Gonna need help math and physics experts on that. But I wrote a few simple tests to see ifs possible... and it seems to be. So we'll see.
+
+I want to create a UI for the outputs somehow. 

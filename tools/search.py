@@ -1,8 +1,3 @@
-"""
-Web search tool for the Prover system.
-Uses OpenRouter's web search capabilities to gather real-time information.
-"""
-
 import requests
 import json
 from typing import Dict, List, Any
@@ -10,32 +5,11 @@ from datetime import datetime
 
 
 class WebSearchTool:
-    """
-    A tool for performing web searches to gather real-time information for claim verification.
-    """
-
     def __init__(self, api_key: str, base_url: str = "https://openrouter.ai/api/v1"):
-        """
-        Initialize the web search tool.
-
-        Args:
-            api_key: OpenRouter API key
-            base_url: OpenRouter API base URL
-        """
         self.api_key = api_key
         self.base_url = base_url
 
     def search(self, query: str, max_results: int = None) -> Dict[str, Any]:
-        """
-        Perform a web search using OpenRouter's web search capabilities.
-
-        Args:
-            query: The search query
-            max_results: Maximum number of results to return
-
-        Returns:
-            Dict containing search results with metadata
-        """
         try:
             response = requests.post(
                 f"{self.base_url}/chat/completions",
@@ -65,20 +39,16 @@ class WebSearchTool:
 
             data = response.json()
             content = data["choices"][0]["message"]["content"]
-
-            # Extract any annotations (citations) from the response
             annotations = data["choices"][0]["message"].get("annotations", [])
 
             return {
                 "query": query,
                 "timestamp": datetime.now().isoformat(),
                 "content": content,
-                "annotations": annotations,
-                "model": data.get("model", "unknown"),
-                "results": self._parse_search_results(content, annotations)
+                "results": self._parse_search_results(annotations, max_results)
             }
 
-        except Exception as e:
+        except (requests.RequestException, KeyError, json.JSONDecodeError) as e:
             return {
                 "error": str(e),
                 "query": query,
@@ -86,20 +56,9 @@ class WebSearchTool:
                 "results": []
             }
 
-    def _parse_search_results(self, content: str, annotations: List[Dict]) -> List[Dict]:
-        """
-        Parse search results from the response content and annotations.
-
-        Args:
-            content: The response content
-            annotations: List of annotation objects
-
-        Returns:
-            List of parsed search results
-        """
+    def _parse_search_results(self, annotations: List[Dict], max_results: int = None) -> List[Dict]:
         results = []
 
-        # Process annotations for structured citation data
         for annotation in annotations:
             if annotation.get("type") == "url_citation":
                 citation = annotation["url_citation"]
@@ -110,25 +69,13 @@ class WebSearchTool:
                     "type": "citation"
                 })
 
-        # If no structured annotations, create a single result from content
-        if not results:
-            results.append({
-                "title": "Search Results",
-                "url": "",
-                "content": content,
-                "type": "raw_content"
-            })
+        if max_results:
+            results = results[:max_results]
 
         return results
 
 
 def get_tool_schema() -> Dict[str, Any]:
-    """
-    Get the JSON schema for the web search tool.
-
-    Returns:
-        Tool schema dictionary
-    """
     return {
         "type": "function",
         "function": {
@@ -154,7 +101,6 @@ def get_tool_schema() -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Example usage
     import os
     from dotenv import load_dotenv
 

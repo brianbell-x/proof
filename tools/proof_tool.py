@@ -1,12 +1,3 @@
-"""
-Prover tool for the Prover system.
-Contains ProverAgent class and ProverTool wrapper.
-
-This module contains all the logic for claim verification, including:
-- ProverAgent: The core agent that constructs rigorous proofs using tools
-- ProverTool: A wrapper that makes ProverAgent callable as a tool by other agents
-"""
-
 import os
 import json
 import logging
@@ -14,14 +5,11 @@ import time
 from typing import Dict, Any
 from datetime import datetime
 from openai import OpenAI
-
-# Import tools that ProverAgent uses (web_search and python_execute)
 from tools.search import WebSearchTool, get_tool_schema as get_search_schema
-from tools.python_repl import PythonREPLTool, get_tool_schema as get_python_schema
+from tools.code_execution import CodeExecutionTool, get_tool_schema as get_python_schema
 
-# Set up logging for ProverAgent
 log_dir = 'logs'
-log_file = os.path.join(log_dir, 'prover.log')
+log_file = os.path.join(log_dir, 'proof.log')
 
 try:
     os.makedirs(log_dir, exist_ok=True)
@@ -40,28 +28,16 @@ logging.basicConfig(
     handlers=handlers
 )
 
-# Configure console verbosity based on PROVER_VERBOSE env var
 console_level = logging.WARNING
-if os.getenv("PROVER_VERBOSE", "0").lower() in ("1", "true", "yes"):
+if os.getenv("PROOF_VERBOSE", "0").lower() in ("1", "true", "yes"):
     console_level = logging.INFO
 logging.getLogger().handlers[0].setLevel(console_level)
 
-# Console log truncation for readability (file logs remain full)
-PROVER_LOG_MAX_CHARS = int(os.getenv("PROVER_LOG_MAX_CHARS", "0"))  # 0 = no truncation
-
+PROOF_LOG_MAX_CHARS = int(os.getenv("PROOF_LOG_MAX_CHARS", "0"))
 logger = logging.getLogger(__name__)
 
 
 def _strip_markdown_code_fences(content: str) -> str:
-    """
-    Strip markdown code fences (```json or ```) from content.
-    
-    Args:
-        content: Content that may contain markdown code fences
-        
-    Returns:
-        Content with code fences removed
-    """
     if not content:
         return content
     content = content.strip()
@@ -75,57 +51,29 @@ def _strip_markdown_code_fences(content: str) -> str:
     return content.strip()
 
 
-class ProverAgent:
-    """
-    Agent that constructs rigorous proofs using tools for evidence gathering.
-    
-    This agent uses web_search and python_execute tools to verify claims through
-    logical analysis and empirical evidence. It follows a falsification-first
-    approach, attempting to break claims before defending them.
-    """
-
+class ProofAgent:
     def __init__(self, api_key: str, model: str = "x-ai/grok-4-fast"):
-        """
-        Initialize the ProverAgent.
-        
-        Args:
-            api_key: OpenRouter API key
-            model: Model to use for claim verification (default: grok-4-fast)
-        """
         self.api_key = api_key
         self.model = model
-        # Initialize OpenAI client for API calls
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
         )
-
-        # Initialize tools that ProverAgent can use
-        self.tools = {}
-        self.tools["web_search"] = WebSearchTool(api_key)
-        self.tools["python_execute"] = PythonREPLTool()
-
-        # Load prompt for the agent (prover_prompt.md contains all prompt content)
-        self.master_prompt = self._load_prompt("prompts/prover_prompt.md")
+        self.tools = {
+            "web_search": WebSearchTool(api_key),
+            "python_execute": CodeExecutionTool()
+        }
+        self.master_prompt = self._load_prompt("prompts/proof_prompt.md")
         current_date = datetime.now().strftime("%Y-%m-%d")
-        self.system_prompt = f"Current date: {current_date}\n\n" + self.master_prompt
-
-        # Set up tool schemas for the model
-        self.tool_schemas = []
-        if ":online" not in self.model:
-            self.tool_schemas.append(get_search_schema())
-        self.tool_schemas.append(get_python_schema())
+        current_time = datetime.now().strftime("%H:%M:%S")
+        # Only substitute the known placeholders to avoid interpreting JSON braces as format fields
+        self.system_prompt = self._interpolate(self.master_prompt, {
+            "current_date": current_date,
+            "current_time": current_time
+        })
+        self.tool_schemas = [get_search_schema(), get_python_schema()]
 
     def _load_prompt(self, path: str) -> str:
-        """
-        Load a prompt file.
-        
-        Args:
-            path: Path to the prompt file
-            
-        Returns:
-            Contents of the prompt file, or empty string if not found
-        """
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return f.read()
@@ -133,17 +81,19 @@ class ProverAgent:
             logger.error(f"Prompt file not found: {path}")
             return ""
 
+    def _interpolate(self, text: str, values: Dict[str, str]) -> str:
+        """
+        Safely interpolate only the placeholders we control (e.g., {current_date}, {current_time})
+        without invoking Python's format() on the whole prompt. This preserves literal braces
+        in JSON examples contained in the prompt.
+        """
+        if not text:
+            return text
+        for k, v in values.items():
+            text = text.replace("{" + k + "}", v)
+        return text
+
     def _calculate_costs(self, prompt_tokens: int, completion_tokens: int) -> Dict[str, Any]:
-        """
-        Calculate API costs based on token usage.
-        
-        Args:
-            prompt_tokens: Number of prompt tokens
-            completion_tokens: Number of completion tokens
-            
-        Returns:
-            Dict with cost breakdown in USD
-        """
         input_cost_per_million = 0.20
         output_cost_per_million = 0.50
         input_cost = (prompt_tokens / 1_000_000) * input_cost_per_million
@@ -156,19 +106,9 @@ class ProverAgent:
         }
 
     def _execute_tool(self, tool_call) -> Dict[str, Any]:
-        """
-        Execute a tool call requested by the model.
-        
-        Args:
-            tool_call: Tool call object from the API response
-            
-        Returns:
-            Dict containing tool execution results
-        """
         start_time = time.time()
 
         try:
-            # Extract tool call information from different possible formats
             if hasattr(tool_call, 'function'):
                 tool_name = tool_call.function.name
                 arguments = json.loads(tool_call.function.arguments)
@@ -182,7 +122,6 @@ class ProverAgent:
 
             logger.info(f"[TOOL CALL REQUEST][id={tool_call_id}][name={tool_name}] args={json.dumps(arguments)}")
 
-            # Execute the appropriate tool
             if tool_name not in self.tools:
                 result = {
                     "error": f"Unknown tool: {tool_name}",
@@ -190,30 +129,27 @@ class ProverAgent:
                 }
             else:
                 tool = self.tools[tool_name]
-
-                if tool_name == "web_search" and tool_name in self.tools:
+                if tool_name == "web_search":
                     result = tool.search(**arguments)
                 elif tool_name == "python_execute":
                     result = tool.execute(**arguments)
                 else:
-                    result = {"error": f"Tool {tool_name} not implemented or not available for this model"}
+                    result = {"error": f"Tool {tool_name} not implemented"}
 
                 result["tool_call_id"] = tool_call_id
                 result["tool_name"] = tool_name
 
-            # Log tool execution results
             duration = time.time() - start_time
             result_payload = json.dumps(result)
-            if PROVER_LOG_MAX_CHARS > 0 and len(result_payload) > PROVER_LOG_MAX_CHARS:
-                truncated_payload = result_payload[:PROVER_LOG_MAX_CHARS] + "... (truncated)"
+            if PROOF_LOG_MAX_CHARS > 0 and len(result_payload) > PROOF_LOG_MAX_CHARS:
+                truncated_payload = result_payload[:PROOF_LOG_MAX_CHARS] + "... (truncated)"
                 logger.info(f"[TOOL RESULT][id={tool_call_id}][name={tool_name}][duration={duration:.3f}s] result={truncated_payload}")
             else:
                 logger.info(f"[TOOL RESULT][id={tool_call_id}][name={tool_name}][duration={duration:.3f}s] result={result_payload}")
 
             return result
 
-        except Exception as e:
-            # Handle errors during tool execution
+        except (ValueError, json.JSONDecodeError, KeyError) as e:
             duration = time.time() - start_time
             tool_call_id = getattr(tool_call, 'id', None) if hasattr(tool_call, 'id') else (tool_call.get('id') if isinstance(tool_call, dict) else None)
             tool_name = None
@@ -229,31 +165,10 @@ class ProverAgent:
             }
 
     def prove_claim(self, claim: str, max_iterations: int = None) -> Dict[str, Any]:
-        """
-        Verify a claim through rigorous logical analysis and evidence gathering.
-        
-        This is the main method that orchestrates the claim verification process.
-        It uses an iterative approach, making API calls and tool calls until a
-        verdict is reached.
-        
-        Args:
-            claim: The claim to verify
-            max_iterations: Maximum number of iterations (optional, defaults to unlimited)
-            
-        Returns:
-            Dict containing the verification result with verdict, reasoning, evidence, etc.
-        """
         start_time = time.time()
-        # Initialize conversation with system prompt and user claim
         messages = [
-            {
-                "role": "system",
-                "content": self.system_prompt
-            },
-            {
-                "role": "user",
-                "content": claim
-            }
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": claim}
         ]
 
         iteration = 0
@@ -262,13 +177,11 @@ class ProverAgent:
         total_prompt_tokens = 0
         total_completion_tokens = 0
 
-        # Main verification loop - continues until verdict is reached
         while True:
             iteration += 1
             logger.info(f"Starting iteration {iteration}")
 
             try:
-                # Make API call to the model
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
@@ -276,23 +189,19 @@ class ProverAgent:
                     tool_choice="auto"
                 )
 
-                # Track token usage
                 if hasattr(response, 'usage') and response.usage:
                     usage = response.usage
                     total_prompt_tokens += getattr(usage, 'prompt_tokens', 0)
                     total_completion_tokens += getattr(usage, 'completion_tokens', 0)
 
-                # Extract message from response
                 message = response.choices[0].message
                 message_dict = message.model_dump() if hasattr(message, 'model_dump') else message
                 messages.append(message_dict)
 
-                # Check for tool calls
                 tool_calls = getattr(message, 'tool_calls', None)
                 if not tool_calls and isinstance(message_dict, dict):
                     tool_calls = message_dict.get('tool_calls')
 
-                # Log model output
                 finish_reason = getattr(response.choices[0], 'finish_reason', 'unknown')
                 model_used = getattr(response, 'model', self.model)
                 content = message.content or ""
@@ -306,12 +215,8 @@ class ProverAgent:
                             tool_calls_list.append(f"id={tc.get('id', 'unknown')} name={tc.get('function', {}).get('name', 'unknown')}")
                     tool_calls_info = f" tool_calls=[{', '.join(tool_calls_list)}]"
 
-                if "verdict" in content:
-                    logger.info(f"[MODEL OUTPUT][iter={iteration}][finish_reason={finish_reason}][model={model_used}] content={content}{tool_calls_info}")
-                else:
-                    logger.info(f"[MODEL OUTPUT][iter={iteration}][finish_reason={finish_reason}][model={model_used}] content={content}{tool_calls_info}")
+                logger.info(f"[MODEL OUTPUT][iter={iteration}][finish_reason={finish_reason}][model={model_used}] content={content}{tool_calls_info}")
 
-                # Try to parse JSON response
                 try:
                     cleaned_content = _strip_markdown_code_fences(content)
                     result = json.loads(cleaned_content) if cleaned_content else {}
@@ -319,18 +224,51 @@ class ProverAgent:
                     logger.warning(f"[MODEL OUTPUT][parse_error] Failed to parse JSON response: {content}")
                     result = {"error": "Invalid JSON response", "raw_content": content}
 
-                # Check if verdict was reached
                 if "verdict" in result:
                     final_result = result
                     logger.info("[FINAL RESULT] Verdict reached")
                     break
 
-                # Process tool calls if any
+                # Fallback: some models embed "tool_calls" inside the JSON content instead of using real function calls.
+                # If present, execute them as if they were proper tool calls, append the tool messages, and continue the loop.
+                if not tool_calls and isinstance(result, dict) and isinstance(result.get("tool_calls"), list):
+                    embedded_calls = result.get("tool_calls", [])
+                    logger.info(f"Processing {len(embedded_calls)} embedded tool_calls from content")
+                    for emb in embedded_calls:
+                        if isinstance(emb, dict) and isinstance(emb.get("function"), dict):
+                            emb_id = emb.get("id") or f"embedded_{int(time.time() * 1000)}"
+                            emb_name = emb.get("function", {}).get("name")
+                            emb_args = emb.get("function", {}).get("arguments", "{}")
+                            # Construct a dict matching the shape expected by _execute_tool
+                            emb_tool_call = {
+                                "id": emb_id,
+                                "type": "function",
+                                "function": {
+                                    "name": emb_name,
+                                    "arguments": emb_args
+                                }
+                            }
+                            try:
+                                if emb_name:
+                                    tools_used.add(emb_name)
+                                tool_result = self._execute_tool(emb_tool_call)
+                                tool_message = {
+                                    "role": "tool",
+                                    "tool_call_id": emb_id,
+                                    "content": json.dumps(tool_result)
+                                }
+                                messages.append(tool_message)
+                                logger.info(f"[EMBEDDED TOOL RESULT SENT][id={emb_id}] message={json.dumps(tool_message)}")
+                            except Exception as e:
+                                logger.error(f"[EMBEDDED TOOL ERROR][id={emb_id} name={emb_name}] {e}")
+                        else:
+                            logger.warning(f"Skipping invalid embedded tool call structure: {type(emb)}")
+                    # After injecting tool results, continue to let the model consume them
+                    continue
+
                 if tool_calls:
                     logger.info(f"Processing {len(tool_calls)} tool calls")
-
                     for tool_call in tool_calls:
-                        # Extract tool call information
                         if hasattr(tool_call, 'function'):
                             tool_name = tool_call.function.name
                             tool_call_id = tool_call.id
@@ -342,10 +280,7 @@ class ProverAgent:
                             continue
 
                         tools_used.add(tool_name)
-                        # Execute the tool
                         tool_result = self._execute_tool(tool_call)
-
-                        # Add tool result to conversation
                         tool_message = {
                             "role": "tool",
                             "tool_call_id": tool_call_id,
@@ -353,12 +288,10 @@ class ProverAgent:
                         }
                         messages.append(tool_message)
                         logger.info(f"[TOOL RESULT SENT][id={tool_call_id}] message={json.dumps(tool_message)}")
-
                 else:
                     logger.info("No tool calls in response, continuing...")
 
             except Exception as e:
-                # Handle errors during iteration
                 logger.error(f"Error in iteration {iteration}: {e}")
                 end_time = time.time()
                 elapsed_time = end_time - start_time
@@ -376,7 +309,6 @@ class ProverAgent:
                     "cost": cost_info
                 }
 
-        # Calculate final statistics
         end_time = time.time()
         elapsed_time = end_time - start_time
         cost_info = self._calculate_costs(total_prompt_tokens, total_completion_tokens)
@@ -386,7 +318,6 @@ class ProverAgent:
             "total": total_prompt_tokens + total_completion_tokens
         }
 
-        # Return final result with metadata
         if final_result:
             final_result["iterations_used"] = iteration
             final_result["tools_used"] = list(tools_used)
@@ -396,7 +327,6 @@ class ProverAgent:
             logger.info(f"[FINAL RESULT] {json.dumps(final_result)}")
             return final_result
         else:
-            # Return partial result if no verdict reached
             partial = {
                 "error": "No verdict reached",
                 "claim": claim,
@@ -411,59 +341,17 @@ class ProverAgent:
             return partial
 
 
-class ProverTool:
-    """
-    A tool that wraps ProverAgent functionality.
-    Allows other agents to use claim verification capabilities as a tool.
-    
-    This class provides a simple interface for other agents (like ChatAgent)
-    to use ProverAgent's claim verification functionality without needing
-    to directly instantiate ProverAgent.
-    """
-
+class ProofTool:
     def __init__(self, api_key: str, model: str = "x-ai/grok-4-fast"):
-        """
-        Initialize the Prover tool.
-        
-        Args:
-            api_key: OpenRouter API key for the ProverAgent
-            model: Model to use for the ProverAgent (default: grok-4-fast)
-        """
-        # Create an instance of ProverAgent to handle claim verification
-        self.prover_agent = ProverAgent(api_key, model)
+        self.proof_agent = ProofAgent(api_key, model)
 
     def prove_claim(self, claim: str, max_iterations: int = None) -> Dict[str, Any]:
-        """
-        Verify a claim using the ProverAgent.
-        
-        This method wraps the ProverAgent's prove_claim method to make it
-        callable as a tool by other agents.
-        
-        Args:
-            claim: The claim to verify
-            max_iterations: Maximum number of iterations for the prover (optional)
-            
-        Returns:
-            Dict containing the verification result with verdict, reasoning, evidence, etc.
-        """
-        # Call the ProverAgent's prove_claim method
-        result = self.prover_agent.prove_claim(claim, max_iterations)
-        
-        # Add timestamp to the result
+        result = self.proof_agent.prove_claim(claim, max_iterations)
         result["timestamp"] = datetime.now().isoformat()
-        
         return result
 
 
 def get_tool_schema() -> Dict[str, Any]:
-    """
-    Get the JSON schema for the Prover tool.
-    
-    This schema defines how the tool appears to the LLM when making tool calls.
-    
-    Returns:
-        Tool schema dictionary compatible with OpenAI function calling format
-    """
     return {
         "type": "function",
         "function": {
@@ -486,3 +374,127 @@ def get_tool_schema() -> Dict[str, Any]:
             }
         }
     }
+
+# ---------------------------------------
+# Inline harness to verify tool-call behavior
+# ---------------------------------------
+if __name__ == "__main__":
+    """
+    Minimal inline test harness to check whether the ProofAgent actually
+    emits python_execute tool calls with executable code (the "model-style" behavior).
+
+    Usage examples:
+      - python -m tools.proof_tool "2025 is prime" --max-iter 3
+      - python -m tools.proof_tool "Binary search is O(n)" --max-iter 3
+      - python -m tools.proof_tool "Softmax isn't a probability distribution" --max-iter 3
+
+    Notes:
+      - Requires OPENROUTER_API_KEY in environment. If absent, this will exit gracefully.
+      - Prints captured tool call details (including a preview of the code string) and the final JSON result.
+    """
+    import os
+    import sys
+    import json
+    import argparse
+    import logging
+
+    # Load .env if available (optional)
+    try:
+        from dotenv import load_dotenv  # type: ignore
+        load_dotenv()
+    except Exception:
+        pass
+
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("[INLINE TEST] OPENROUTER_API_KEY not set. Skipping live test.")
+        sys.exit(0)
+
+    parser = argparse.ArgumentParser(description="Inline ProofAgent tool-call verifier")
+    parser.add_argument("claim", nargs="*", help="Claim text to analyze")
+    parser.add_argument("--max-iter", type=int, default=4, help="Maximum reasoning iterations")
+    args = parser.parse_args()
+
+    claim_text = " ".join(args.claim).strip() or "Binary search is O(n)."
+
+    # Create agent
+    agent = ProofAgent(api_key)
+
+    # Ensure console logs show tool call details
+    try:
+        for h in logging.getLogger().handlers:
+            h.setLevel(logging.INFO)
+        logging.getLogger().setLevel(logging.INFO)
+    except Exception:
+        pass
+
+    # Capture tool calls to inspect code arguments
+    tool_events = []
+    _original_execute_tool = agent._execute_tool  # bound method
+
+    def _wrapper_execute_tool(tool_call, _orig=_original_execute_tool):
+        try:
+            if hasattr(tool_call, "function"):
+                tool_name = getattr(tool_call.function, "name", "unknown")
+                tool_call_id = getattr(tool_call, "id", None)
+                arguments_raw = getattr(tool_call.function, "arguments", "{}")
+                arguments = json.loads(arguments_raw or "{}")
+            elif isinstance(tool_call, dict):
+                tool_name = tool_call.get("function", {}).get("name", "unknown")
+                tool_call_id = tool_call.get("id")
+                arguments = json.loads(tool_call.get("function", {}).get("arguments", "{}") or "{}")
+            else:
+                tool_name = "unknown"
+                tool_call_id = None
+                arguments = {}
+        except Exception as e:
+            print(f"[INLINE TEST] Error parsing tool_call: {e}")
+            tool_name = "unknown"
+            tool_call_id = None
+            arguments = {}
+
+        code_snippet = arguments.get("code", "")
+        preview = ""
+        try:
+            if isinstance(code_snippet, str):
+                preview = code_snippet[:400].replace("\n", "\\n")
+        except Exception:
+            preview = "<unavailable>"
+
+        print("\n[INLINE TEST] TOOL CALL")
+        print(f"  id={tool_call_id} name={tool_name}")
+        if tool_name == "python_execute":
+            print(f"  code_length={len(code_snippet) if isinstance(code_snippet, str) else 0}")
+            print(f"  code_preview='{preview}'")
+
+        result = _orig(tool_call)
+        try:
+            keys = list(result.keys()) if isinstance(result, dict) else []
+        except Exception:
+            keys = []
+        print("[INLINE TEST] TOOL RESULT keys:", keys)
+        tool_events.append({
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "arguments_keys": list(arguments.keys()),
+            "has_code": bool(arguments.get("code")),
+            "result_keys": keys,
+        })
+        return result
+
+    # Monkey-patch for capture
+    agent._execute_tool = _wrapper_execute_tool  # type: ignore[attr-defined]
+
+    print(f"[INLINE TEST] Running claim: {claim_text}")
+    final = agent.prove_claim(claim_text, max_iterations=args.max_iter)
+
+    print("\n[INLINE TEST] FINAL OUTPUT")
+    try:
+        print(json.dumps(final, indent=2))
+    except Exception:
+        print(final)
+
+    # Quick summary of tool usage
+    print("\n[INLINE TEST] TOOL USAGE SUMMARY")
+    for evt in tool_events:
+        print(f"  id={evt['tool_call_id']} name={evt['tool_name']} has_code={evt['has_code']} result_keys={evt['result_keys']}")
