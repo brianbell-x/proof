@@ -6,7 +6,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from core.agent import ProverAgent
+from chat.agent import ProverAgent
 
 log_file = os.path.join(os.path.dirname(__file__), '..', 'temp', 'test_claims_log.txt')
 os.makedirs(os.path.dirname(log_file), exist_ok=True)

@@ -17,7 +17,7 @@ A real time FUD destruction engine that stress tests claims through rigorous log
 
 3. **Run the agent**:
    ```bash
-   python -m core.agent
+   python -m chat.agent
    ```
 4. **Type a claim and see the proof tree**
 

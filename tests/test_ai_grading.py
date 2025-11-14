@@ -6,7 +6,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from core.agent import ProverAgent
+from chat.agent import ProverAgent
 from openai import OpenAI
 from dotenv import load_dotenv
 
