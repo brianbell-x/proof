@@ -1,10 +1,3 @@
-"""
-Claim-driven tests for CodeExecutionTool trimmed to 8 tests across 5 areas.
-Each test encodes a real-world-style claim you'd see on X and attempts to
-DISPROVE it via computation or behavior observation, aligning with a
-falsification-first philosophy.
-"""
-
 import unittest
 import sys
 import os
@@ -12,7 +5,7 @@ import os
 # Ensure tools are importable when running from tests directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from tools.code_execution import CodeExecutionTool
+from tool.proof_tool import CodeExecutionTool
 
 
 class TestCodeExecutionClaims(unittest.TestCase):
@@ -23,14 +16,12 @@ class TestCodeExecutionClaims(unittest.TestCase):
         return self.tool.execute(code=code)
 
     def test_claim_float_sum_exact_equality(self):
-        """Claim: 0.1 + 0.2 equals exactly 0.3 — Expect DISPROVEN."""
         code = "result = (0.1 + 0.2) == 0.3\nprint(f'Exact equality: {result}')"
         result = self._exec(code)
         self.assertTrue(result["success"])
         self.assertIn("Exact equality: False", result["output"])
 
     def test_claim_2025_is_prime(self):
-        """Claim: '2025 is prime' — Expect DISPROVEN via factorization/primality test."""
         code = (
             "import math\n"
             "def is_prime(n):\n"
@@ -53,7 +44,6 @@ class TestCodeExecutionClaims(unittest.TestCase):
         self.assertIn("Claim disproven: True", result["output"])
 
     def test_claim_binary_search_is_linear_time(self):
-        """Claim: 'Binary search is O(n)' — Expect DISPROVEN by comparisons vs log2(n)."""
         code = (
             "import math\n"
             "def binary_search(arr, target):\n"
@@ -84,7 +74,6 @@ class TestCodeExecutionClaims(unittest.TestCase):
         self.assertIn("Claim disproven: True", result["output"])
 
     def test_claim_softmax_not_probability_distribution(self):
-        """Claim: 'Softmax isn’t a probability distribution' — Expect DISPROVEN."""
         code = (
             "import math\n"
             "def softmax(xs):\n"
@@ -104,7 +93,6 @@ class TestCodeExecutionClaims(unittest.TestCase):
         self.assertIn("Claim disproven: True", result["output"])
 
     def test_claim_sha256_collisions_are_trivial(self):
-        """Claim: 'SHA-256 collisions are trivial' — Expect DISPROVEN (small-sample uniqueness)."""
         code = (
             "import hashlib\n"
             "inputs = ['hello', 'world', 'test', 'crypto', 'hash', 'proof', 'engine', 'falsify']\n"
@@ -118,7 +106,6 @@ class TestCodeExecutionClaims(unittest.TestCase):
         self.assertIn("Claim disproven: True", result["output"])
 
     def test_claim_tool_forgets_state_between_runs(self):
-        """Claim: 'The code execution tool forgets state between runs' — Expect DISPROVEN (state persists per session)."""
         r1 = self._exec("x = 42\nprint('set')")
         self.assertTrue(r1["success"])
         r2 = self._exec("print(x)\nprint('Claim disproven: ' + str(x == 42))")
@@ -127,14 +114,12 @@ class TestCodeExecutionClaims(unittest.TestCase):
         self.assertIn("Claim disproven: True", r2["output"])
 
     def test_claim_division_by_zero_crashes_without_reporting(self):
-        """Claim: 'Division by zero crashes the tool without reporting' — Expect DISPROVEN (error captured)."""
         result = self._exec("1/0")
         self.assertFalse(result["success"])
         self.assertIn("error", result)
         self.assertIn("division by zero", result["error"].lower())
 
     def test_claim_tool_does_not_record_execution_metadata(self):
-        """Claim: 'The tool does not record execution metadata' — Expect DISPROVEN (timestamp + execution_time)."""
         result = self._exec("sum(range(1000))")
         self.assertTrue(result["success"])
         self.assertIn("timestamp", result)

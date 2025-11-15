@@ -279,6 +279,9 @@ The `web_search` tool returns a JSON object with the following structure:
 **Parameters**:
 - `code`: Python code to execute (include print statements to show results)
 
+**Execution Limitations**:
+- **Timeout**: Code execution has a hard limit of **300 seconds (5 minutes)**. If code runs longer than this, execution will be terminated and a timeout error will be returned. Design your code to complete within this time limit. For long-running computations, consider breaking them into smaller chunks or using approximations.
+
 **Critical Usage Requirements**:
 
 When you need to run Python code, you MUST request the `python_execute` function via tool_calls (function calling), not by pasting a code block in your assistant content.

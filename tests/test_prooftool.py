@@ -1,8 +1,3 @@
-"""
-Interactive test script for ProofTool.
-Displays input, system message, tool calls, and outputs with colored borders.
-"""
-
 import os
 import sys
 import json
@@ -12,7 +7,7 @@ from datetime import datetime
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from tools.proof_tool import ProofAgent
+from tool.proof_tool import ProofAgent
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,7 +31,6 @@ class Colors:
 
 
 def print_bordered_section(title: str, content: str, color: str = Colors.CYAN, width: int = 80):
-    """Print a section with a colored border."""
     border_char = '═'
     corner_char = '╔'
     corner_end = '╗'
@@ -76,8 +70,6 @@ def print_bordered_section(title: str, content: str, color: str = Colors.CYAN, w
 
 
 class ProofToolTester:
-    """Wrapper around ProofAgent that captures and displays all information."""
-    
     def __init__(self, api_key: str, model: str = "x-ai/grok-4-fast"):
         self.api_key = api_key
         self.model = model
@@ -96,7 +88,6 @@ class ProofToolTester:
         self.proof_agent._execute_tool = self._capture_tool_execution
     
     def _capture_tool_execution(self, tool_call):
-        """Capture tool execution and display it."""
         # Extract tool call info
         if hasattr(tool_call, 'function'):
             tool_name = tool_call.function.name
@@ -157,7 +148,6 @@ class ProofToolTester:
         return result
     
     def test_claim(self, claim: str, max_iterations: int = None):
-        """Test a claim and display all information."""
         import time
         from tools.proof_tool import _strip_markdown_code_fences
         
@@ -359,7 +349,6 @@ class ProofToolTester:
 
 
 def main():
-    """Main function to run the test."""
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         print(f"{Colors.RED}Error: OPENROUTER_API_KEY not found in environment variables.{Colors.RESET}")
